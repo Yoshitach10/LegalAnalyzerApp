@@ -8,7 +8,7 @@ from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ✅ Must be first Streamlit command
+# --- Streamlit Page Config ---
 st.set_page_config(
     page_title="Legal Document Analyzer",
     page_icon="⚖️",
@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ✅ Centered logo from GitHub
+# --- Logo ---
 st.markdown(
     "<div style='text-align: center; margin-bottom: 1rem;'>"
     "<img src='https://raw.githubusercontent.com/Yoshitach10/LegalAnalyzerApp/main/logo.png' width='120'>"
@@ -24,7 +24,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Load OpenAI key
+# --- Load OpenAI Key ---
 openai.api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
 
 # --- PDF Text Extraction ---
@@ -41,7 +41,11 @@ summarizer = load_summarizer()
 
 def summarize_text(text):
     chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
-    return " ".join([summarizer(chunk)[0]["summary_text"] for chunk in chunks])
+    results = []
+    for chunk in chunks:
+        summary = summarizer(chunk, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+        results.append(summary)
+    return " ".join(results)
 
 # --- Clause Extraction ---
 clause_keywords = {
@@ -104,7 +108,7 @@ def rewrite_clause_with_ai(clause):
     )
     return response["choices"][0]["message"]["content"].strip()
 
-# --- Streamlit App UI ---
+# --- App Interface ---
 st.title("📚 AI-Powered Legal Document Analyzer")
 uploaded_file = st.file_uploader("Upload a legal PDF document", type=["pdf"])
 
@@ -115,8 +119,9 @@ if uploaded_file:
     with st.expander("View extracted text"):
         st.write(raw_text)
 
+    st.caption("📌 Summarization may take a few seconds for large files.")
     if st.button("Summarize Document"):
-        with st.spinner("Summarizing..."):
+        with st.spinner("Summarizing your document..."):
             summary = summarize_text(raw_text)
         st.subheader("🧠 Summary")
         st.write(summary)
@@ -163,10 +168,12 @@ if uploaded_file:
             st.error("Please enter a clause to rewrite.")
 else:
     st.info("Please upload a PDF to begin.")
-    st.markdown("---")
+
+# --- Footer ---
+st.markdown("---")
 st.markdown(
     "<div style='text-align: center; font-size: 14px; color: gray;'>"
-    "Developed by <strong>Yoshita Chebrolu</strong> and <strong>Keerthan Racharla</strong> 💻✨"
+    "Developed by <strong>Yoshita Chebrolu</strong> and <strong>[Your Teammate's Name]</strong> 💻✨"
     "</div>",
     unsafe_allow_html=True
 )
