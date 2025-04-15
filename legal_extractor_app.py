@@ -1,17 +1,5 @@
 import streamlit as st
-st.set_page_config(
-    page_title="Legal Analyzer App",
-    page_icon="⚖️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-from PIL import Image  # only if not already imported
-
-st.markdown(
-    "<div style='text-align: center;'><img src='https://raw.githubusercontent.com/Yoshitach10/LegalAnalyzerApp/main/logo.png' width='120'></div>",
-    unsafe_allow_html=True
-)
-
+from PIL import Image
 import fitz  # PyMuPDF
 import re
 import os
@@ -20,39 +8,92 @@ from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Load OpenAI API key
+# ✅ Must be first Streamlit command
+st.set_page_config(
+    page_title="Legal Document Analyzer",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ✅ Centered logo from GitHub
+st.markdown(
+    "<div style='text-align: center; margin-bottom: 1rem;'>"
+    "<img src='https://raw.githubusercontent.com/Yoshitach10/LegalAnalyzerApp/main/logo.png' width='120'>"
+    "</div>",
+    unsafe_allow_html=True
+)
+
+# Load OpenAI key
 openai.api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
 
-# Utility: Extract text from PDF
+# --- PDF Text Extraction ---
 def extract_text_from_pdf(uploaded_file):
     with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
         return "\n".join([page.get_text() for page in doc])
 
-# Module 2: Summarization
+# --- Summarization ---
+@st.cache_resource
+def load_summarizer():
+    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+
+summarizer = load_summarizer()
+
 def summarize_text(text):
-    summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
     chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
     return " ".join([summarizer(chunk)[0]["summary_text"] for chunk in chunks])
 
-# Module 3: Clause Extraction
-def extract_clauses(text):
-    return re.findall(r'(Clause\s\d+[:\s].*?)(?=\nClause\s\d+:|\Z)', text, re.DOTALL)
+# --- Clause Extraction ---
+clause_keywords = {
+    "Confidentiality": ["confidential", "non-disclosure", "privacy"],
+    "Termination": ["terminate", "termination", "cancel", "end of agreement"],
+    "Payment": ["payment", "compensation", "fee", "remuneration"],
+    "Governing Law": ["jurisdiction", "governing law", "under the laws of"],
+    "Indemnity": ["indemnify", "liability", "hold harmless"],
+    "Force Majeure": ["force majeure", "act of god", "unforeseen circumstances"],
+    "Dispute Resolution": ["arbitration", "dispute", "litigation", "settlement"]
+}
 
-# Module 4: Risk Identification
-def identify_risky_clauses(clauses, risky_keywords):
+def extract_clauses(text):
+    extracted_clauses = {}
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    for clause, keywords in clause_keywords.items():
+        matched_sentences = [s.strip() for s in sentences if any(k.lower() in s.lower() for k in keywords)]
+        if matched_sentences:
+            extracted_clauses[clause] = matched_sentences
+    return extracted_clauses
+
+# --- Risk Detection ---
+def find_risky_clauses(clauses, risky_keywords):
     risky = []
     for clause in clauses:
         if any(keyword.lower() in clause.lower() for keyword in risky_keywords):
             risky.append(clause)
     return risky
 
-# Module 5: Clause Comparison
-def compare_clause_similarity(clause, reference_clause):
-    vectorizer = TfidfVectorizer().fit_transform([clause, reference_clause])
-    similarity = cosine_similarity(vectorizer[0:1], vectorizer[1:2])
-    return similarity[0][0]
+# --- Clause Comparison ---
+standard_clauses = {
+    "termination": "This agreement may be terminated by either party upon giving written notice of 30 days.",
+    "liability": "The liability of the parties shall be limited to direct damages only.",
+    "dispute_resolution": "Any disputes arising shall be resolved through arbitration in accordance with applicable laws.",
+    "confidentiality": "Parties agree to maintain the confidentiality of shared information during and after the agreement term."
+}
 
-# Module 6: AI-based Clause Rewriting
+def compare_with_standard_clauses(clauses, standard_clauses):
+    comparisons = []
+    for clause in clauses:
+        max_similarity = 0
+        best_match = ""
+        for label, standard in standard_clauses.items():
+            vectorizer = TfidfVectorizer().fit_transform([clause, standard])
+            similarity = cosine_similarity(vectorizer[0:1], vectorizer[1:2])
+            if similarity[0][0] > max_similarity:
+                max_similarity = similarity[0][0]
+                best_match = standard
+        comparisons.append((clause, best_match, round(max_similarity, 2)))
+    return comparisons
+
+# --- AI Clause Rewriting ---
 def rewrite_clause_with_ai(clause):
     prompt = f"Rewrite the following legal clause in a clearer, more standard form:\n\n\"{clause}\""
     response = openai.ChatCompletion.create(
@@ -63,56 +104,54 @@ def rewrite_clause_with_ai(clause):
     )
     return response["choices"][0]["message"]["content"].strip()
 
-# Streamlit App UI
-st.set_page_config(page_title="Legal Document Analyzer", layout="wide")
+# --- Streamlit App UI ---
 st.title("📚 AI-Powered Legal Document Analyzer")
-
 uploaded_file = st.file_uploader("Upload a legal PDF document", type=["pdf"])
 
 if uploaded_file:
     raw_text = extract_text_from_pdf(uploaded_file)
+
     st.subheader("📄 Extracted Text")
     with st.expander("View extracted text"):
         st.write(raw_text)
 
-    # Summarization
     if st.button("Summarize Document"):
         with st.spinner("Summarizing..."):
             summary = summarize_text(raw_text)
-        st.subheader("📝 Summary")
+        st.subheader("🧠 Summary")
         st.write(summary)
 
-    # Clause Extraction
     if st.button("Extract Clauses"):
-        clauses = extract_clauses(raw_text)
+        clauses_dict = extract_clauses(raw_text)
         st.subheader("📜 Extracted Clauses")
-        for idx, clause in enumerate(clauses, 1):
-            st.markdown(f"**Clause {idx}:** {clause}")
+        for title, lines in clauses_dict.items():
+            st.markdown(f"### {title} Clause")
+            for l in lines:
+                st.write(f"- {l}")
+        st.session_state["clauses"] = [c for sublist in clauses_dict.values() for c in sublist]
 
-    # Risk Identification
     if st.button("Identify Risky Clauses"):
         risky_keywords = ["terminate", "penalty", "breach", "liability", "indemnify", "damages"]
-        clauses = extract_clauses(raw_text)
-        risky = identify_risky_clauses(clauses, risky_keywords)
+        clauses = st.session_state.get("clauses", [])
+        risky = find_risky_clauses(clauses, risky_keywords)
         st.subheader("⚠️ Risky Clauses")
         if risky:
             for clause in risky:
                 st.warning(clause)
+            st.session_state["risky"] = risky
         else:
             st.success("No risky clauses identified.")
 
-    # Clause Comparison
     st.subheader("📊 Compare a Clause")
     user_clause = st.text_area("Paste a clause to compare")
     reference_clause = st.text_area("Paste the reference clause")
     if st.button("Compare Clauses"):
         if user_clause and reference_clause:
-            similarity = compare_clause_similarity(user_clause, reference_clause)
-            st.info(f"Similarity score: **{similarity:.2f}**")
+            similarity = compare_with_standard_clauses([user_clause], {"ref": reference_clause})
+            st.info(f"Similarity score: **{similarity[0][2]:.2f}**")
         else:
             st.error("Please enter both clauses.")
 
-    # Clause Rewriting
     st.subheader("✍️ AI Clause Rewriting")
     clause_to_rewrite = st.text_area("Enter a clause you'd like to rewrite")
     if st.button("Rewrite Clause"):
@@ -122,3 +161,5 @@ if uploaded_file:
             st.write(rewritten)
         else:
             st.error("Please enter a clause to rewrite.")
+else:
+    st.info("Please upload a PDF to begin.")
