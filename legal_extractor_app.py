@@ -1,9 +1,15 @@
 import streamlit as st
-from PIL import Image
+st.set_page_config(
+    page_title="Legal Analyzer App",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+from PIL import Image  # only if not already imported
 
 logo = Image.open("logo.png")
-st.image(logo, width=100)  # adjust width as needed
-import streamlit as st
+st.image(logo, width=120)
+
 import fitz  # PyMuPDF
 import re
 import os
