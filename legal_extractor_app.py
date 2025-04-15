@@ -7,8 +7,10 @@ st.set_page_config(
 )
 from PIL import Image  # only if not already imported
 
-logo = Image.open("logo.png")
-st.image(logo, width=120)
+st.markdown(
+    "<div style='text-align: center;'><img src='https://raw.githubusercontent.com/Yoshitach10/LegalAnalyzerApp/main/logo.png' width='120'></div>",
+    unsafe_allow_html=True
+)
 
 import fitz  # PyMuPDF
 import re
