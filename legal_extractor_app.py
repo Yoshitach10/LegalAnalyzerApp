@@ -163,3 +163,10 @@ if uploaded_file:
             st.error("Please enter a clause to rewrite.")
 else:
     st.info("Please upload a PDF to begin.")
+    st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; font-size: 14px; color: gray;'>"
+    "Developed by <strong>Yoshita Chebrolu</strong> and <strong>[Keerthan Racharla]</strong> 💻✨"
+    "</div>",
+    unsafe_allow_html=True
+)
