@@ -1,4 +1,9 @@
 import streamlit as st
+from PIL import Image
+
+logo = Image.open("logo.png")
+st.image(logo, width=100)  # adjust width as needed
+import streamlit as st
 import fitz  # PyMuPDF
 import re
 import os
